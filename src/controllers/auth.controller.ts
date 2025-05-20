@@ -1,50 +1,45 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { User } from '../models/user.model';
+import User from '../models/user.model';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
-export const register = async (req: Request, res: Response) => {
-  try {
-    const { name, email, phone, password } = req.body;
+export const register = async (req: Request, res: Response): Promise<any> => {
+  const { name, email, phone, password, tenantId } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Campos obrigatórios faltando' });
-    }
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ message: 'Usuário já existe' });
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const user = new User({ name, email, phone, password: hashedPassword });
-    await user.save();
-
-    return res.status(201).json({ message: 'Usuário criado com sucesso' });
-  } catch (error) {
-    return res.status(500).json({ message: 'Erro no servidor', error });
+  if (!name || !email || !phone || !password || !tenantId) {
+    return res.status(400).json({ message: 'Todos os campos são obrigatórios' });
   }
+
+  const existingUser = await User.findOne({ email });
+  if (existingUser) return res.status(400).json({ message: 'Email já registrado' });
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const user = await User.create({
+    name,
+    email,
+    phone,
+    password: hashedPassword,
+    tenantId,
+  });
+
+  const token = jwt.sign({ id: user._id, tenantId: user.tenantId }, JWT_SECRET, { expiresIn: '7d' });
+
+  res.status(201).json({ token });
 };
 
-export const login = async (req: Request, res: Response) => {
-  try {
-    const { email, password } = req.body;
+export const login = async (req: Request, res: Response): Promise<any> => {
+  const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: 'Credenciais inválidas' });
+  const user = await User.findOne({ email });
+  if (!user) return res.status(400).json({ message: 'Usuário não encontrado' });
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: 'Credenciais inválidas' });
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) return res.status(401).json({ message: 'Senha inválida' });
 
-    const token = jwt.sign(
-      { userId: user._id, email: user.email, subscription: user.subscription },
-      JWT_SECRET,
-      { expiresIn: '1d' }
-    );
+  const token = jwt.sign({ id: user._id, tenantId: user.tenantId }, JWT_SECRET, { expiresIn: '7d' });
 
-    return res.json({ token, user: { name: user.name, email: user.email, subscription: user.subscription } });
-  } catch (error) {
-    return res.status(500).json({ message: 'Erro no servidor', error });
-  }
+  res.json({ token });
 };

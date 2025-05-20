@@ -1,31 +1,34 @@
-import axios from 'axios';
+// src/services/ai.service.ts
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+import OpenAI from "openai";
 
-export async function generateAgenda(prompt: string): Promise<any> {
-  const data = {
-    model: 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: 'Você é um assistente que gera agendas inteligentes.' },
-      { role: 'user', content: prompt },
-    ],
-    max_tokens: 500,
-  };
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
 
+export async function gerarAgendaComIA(prompt: string) {
   try {
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      data,
-      {
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "Você é um assistente que cria agendas inteligentes." },
+        { role: "user", content: prompt },
+      ],
+    });
 
-    return response.data.choices[0].message.content;
+    // A resposta vem no choices[0].message.content
+    const texto = response.choices[0].message.content;
+
+    // Supondo que o texto seja JSON, parse para objeto
+    if (!texto) {
+      throw new Error('Texto para parsing está vazio ou nulo');
+    }
+
+    const agenda = JSON.parse(texto);
+
+    return agenda;
   } catch (error) {
-    throw new Error('Erro na API OpenAI: ' + error);
+    console.error("Erro ao gerar agenda com IA:", error);
+    throw error;
   }
 }
